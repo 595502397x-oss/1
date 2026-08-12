@@ -1,0 +1,68 @@
+name: Build embodied world-model figure atlas
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'build_atlas.py'
+      - 'requirements-atlas.txt'
+      - '.github/workflows/build-atlas.yml'
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: requirements-atlas.txt
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2 libpango-1.0-0 libpangocairo-1.0-0 fonts-noto-cjk
+          python -m pip install --upgrade pip
+          pip install -r requirements-atlas.txt
+
+      - name: Build atlas
+        run: python build_atlas.py
+
+      - name: Verify PDF and render sample pages
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import fitz
+          pdf = Path('output/embodied_world_model_visual_logic_atlas_52.pdf')
+          assert pdf.exists(), pdf
+          assert pdf.stat().st_size > 1_000_000, pdf.stat().st_size
+          doc = fitz.open(pdf)
+          assert len(doc) >= 54, len(doc)
+          out = Path('output/verification_renders')
+          out.mkdir(parents=True, exist_ok=True)
+          for pno in sorted({0, 1, len(doc)//2, len(doc)-1}):
+              pix = doc[pno].get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
+              pix.save(out / f'page_{pno+1:03d}.png')
+          print({'pages': len(doc), 'size_bytes': pdf.stat().st_size})
+          PY
+
+      - name: Upload atlas artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: embodied-world-model-visual-logic-atlas
+          path: |
+            output/embodied_world_model_visual_logic_atlas_52.pdf
+            output/sources.csv
+            output/build_report.json
+            output/verification_renders/*.png
+          if-no-files-found: error
+          retention-days: 14
