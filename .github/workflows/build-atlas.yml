@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'build_atlas.py'
+      - 'build_atlas_v2.py'
       - 'requirements-atlas.txt'
       - '.github/workflows/build-atlas.yml'
 
@@ -34,31 +35,67 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-atlas.txt
 
-      - name: Build atlas
-        run: python build_atlas.py
+      - name: Build atlas with strict method-figure selection
+        run: python build_atlas_v2.py
 
-      - name: Verify PDF and render sample pages
+      - name: Verify sources, PDF, and sample renders
         run: |
           python - <<'PY'
           from pathlib import Path
+          import json
           import fitz
+
           pdf = Path('output/embodied_world_model_visual_logic_atlas_52.pdf')
+          report_path = Path('output/build_report.json')
           assert pdf.exists(), pdf
+          assert report_path.exists(), report_path
           assert pdf.stat().st_size > 1_000_000, pdf.stat().st_size
+
+          report = json.loads(report_path.read_text(encoding='utf-8'))
+          selected = report['selected']
+          assert len(selected) == 52, len(selected)
+          assert not report['errors'], report['errors']
+          by_id = {item['arxiv_id']: item for item in selected}
+          assert '2303.07109' in by_id and '2303.07142' not in by_id
+          assert '2411.04983' in by_id
+          assert '2302.00111' in by_id and '2310.08864' not in by_id
+          required = {
+              '1811.04551': 2,
+              '2111.00210': 2,
+              '2106.13195': 2,
+              '2205.09853': 3,
+              '2310.09615': 2,
+              '2303.03378': 1,
+              '2210.03094': 3,
+              '2405.12213': 0,
+              '2304.13705': 4,
+              '2204.01691': 1,
+              '2209.07753': 1,
+              '2203.06173': 2,
+              '2305.16291': 2,
+              '2411.04983': 1,
+          }
+          for arxiv_id, figure_number in required.items():
+              assert by_id[arxiv_id]['figure_number'] == figure_number, (arxiv_id, by_id[arxiv_id]['figure_number'])
+
           doc = fitz.open(pdf)
-          assert len(doc) >= 54, len(doc)
+          assert len(doc) == 55, len(doc)
           out = Path('output/verification_renders')
           out.mkdir(parents=True, exist_ok=True)
-          for pno in sorted({0, 1, len(doc)//2, len(doc)-1}):
+          figure_positions = {item['arxiv_id']: i for i, item in enumerate(selected, start=1)}
+          pages = {0, 1, len(doc) - 1}
+          for arxiv_id in ('1811.04551', '2303.07109', '2411.04983', '2303.03378', '2304.13705', '2305.16291'):
+              pages.add(figure_positions[arxiv_id] + 2)  # zero-index PDF page: 3 + (figure index - 1)
+          for pno in sorted(pages):
               pix = doc[pno].get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
               pix.save(out / f'page_{pno+1:03d}.png')
-          print({'pages': len(doc), 'size_bytes': pdf.stat().st_size})
+          print({'pages': len(doc), 'figures': len(selected), 'size_bytes': pdf.stat().st_size})
           PY
 
       - name: Upload atlas artifact
         uses: actions/upload-artifact@v4
         with:
-          name: embodied-world-model-visual-logic-atlas
+          name: embodied-world-model-visual-logic-atlas-v2
           path: |
             output/embodied_world_model_visual_logic_atlas_52.pdf
             output/sources.csv
