@@ -1,3 +1,4 @@
+# Dependencies for the embodied/world-model visual logic atlas
 PyMuPDF==1.24.9
 Pillow==10.4.0
 requests==2.32.3
