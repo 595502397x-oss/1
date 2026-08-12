@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'diagnose_figures.py'
+      - 'diagnose_pdf_captions.py'
       - '.github/workflows/diagnose-atlas.yml'
 
 permissions:
@@ -16,7 +17,7 @@ env:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,5 +27,7 @@ jobs:
           cache-dependency-path: requirements-atlas.txt
       - name: Install dependencies
         run: pip install -r requirements-atlas.txt
-      - name: Print candidate figure captions
+      - name: Print HTML candidate figure captions
         run: python diagnose_figures.py
+      - name: Print PDF candidate figure captions
+        run: python diagnose_pdf_captions.py
